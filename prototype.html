@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PP7 file creator</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#edf1f7;background:#111722}
+    *{box-sizing:border-box} body{margin:0} header{padding:22px 28px;background:#1b2636;border-bottom:1px solid #344155}
+    h1{font-size:22px;margin:0} header p{color:#aab7c8;margin:6px 0 0;font-size:13px}
+    main{max-width:1200px;margin:24px auto;padding:0 18px;display:grid;grid-template-columns:340px 1fr;gap:18px}
+    section{background:#1b2636;border:1px solid #344155;border-radius:14px;padding:18px}
+    h2{font-size:16px;margin:0 0 14px} textarea,input,select{width:100%;background:#101824;color:#edf1f7;border:1px solid #43536a;border-radius:8px;padding:10px;font:inherit}
+    textarea{min-height:190px;resize:vertical} button{background:#4d83d8;color:white;border:0;border-radius:8px;padding:9px 12px;font-weight:600;cursor:pointer;margin:5px 4px 5px 0}
+    button.secondary{background:#34465f} button.danger{background:#9f3e47}
+    .muted{color:#aab7c8;font-size:12px;line-height:1.5}.layout{display:grid;grid-template-columns:250px 1fr;gap:16px}
+    .slides{display:flex;flex-direction:column;gap:7px;max-height:520px;overflow:auto}
+    .slide{padding:10px;border:1px solid #43536a;border-radius:8px;cursor:pointer;background:#121c29}
+    .slide.active{border-color:#75a7f4;background:#20334d}.slide small{display:block;color:#aab7c8;margin-top:4px}
+    .preview{background:#090e16;border:1px solid #43536a;border-radius:10px;min-height:250px;display:flex;align-items:center;justify-content:center;text-align:center;padding:28px;margin:12px 0}
+    .preview .screen{width:100%;aspect-ratio:16/9;max-height:330px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:linear-gradient(135deg,#18283c,#101722);padding:24px}
+    .preview h3{font-size:clamp(18px,3vw,32px);margin:0;white-space:pre-wrap}.preview p{font-size:clamp(13px,1.7vw,19px);white-space:pre-wrap;margin:0}
+    label{display:block;font-size:12px;color:#aab7c8;margin:12px 0 5px}
+    @media(max-width:800px){main{grid-template-columns:1fr}.layout{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<header>
+  <h1>PP7 file creator</h1>
+  <p>Predigttexte vorbereiten · Folien bearbeiten · Entwurf exportieren</p>
+</header>
+<main>
+  <section>
+    <h2>1. E-Mail-Text einfügen</h2>
+    <textarea id="source" placeholder="Kopiere hier den Text deiner E-Mail mit Stichpunkten und Bibelstellen hinein …"></textarea>
+    <button id="parse">Folien erstellen</button>
+    <p class="muted">Erkennt Absätze, Aufzählungen und Bibelstellen als erste Folienvorschläge. Bibeltexte werden nicht automatisch ergänzt oder erfunden.</p>
+    <hr style="border:0;border-top:1px solid #344155;margin:18px 0">
+    <h2>2. Theme auswählen</h2>
+    <select id="theme"><option>Standard – dunkel</option><option>Einfach – hell</option><option>Minimal</option></select>
+    <label>Eigenes Theme vormerken (Name)</label>
+    <input id="themeName" placeholder="z. B. Gottesdienst Sonntag">
+    <button class="secondary" id="addTheme">Theme-Namen hinzufügen</button>
+    <p class="muted">Hinweis: Das Vormerken eines Namens importiert noch keine echten ProPresenter-Themedateien.</p>
+  </section>
+  <section>
+    <h2>3. Folien bearbeiten und Vorschau</h2>
+    <div class="layout">
+      <div>
+        <div id="slides" class="slides"></div>
+        <button id="add">+ Folie</button>
+        <button id="duplicate" class="secondary">Duplizieren</button>
+        <button id="up" class="secondary">↑</button><button id="down" class="secondary">↓</button>
+        <button id="remove" class="danger">Löschen</button>
+      </div>
+      <div>
+        <div class="preview"><div class="screen" id="screen"><h3>Noch keine Folie</h3><p>Füge links einen Text ein oder erstelle eine Folie.</p></div></div>
+        <label>Folientitel</label><input id="slideTitle" placeholder="Titel">
+        <label>Folientext</label><textarea id="slideBody" style="min-height:110px" placeholder="Text der Folie"></textarea>
+        <button id="save" class="secondary">Änderungen übernehmen</button>
+        <button id="export">Entwurf als JSON exportieren</button>
+      </div>
+    </div>
+    <p class="muted" id="status">Dies ist ein lokaler Prototyp. Der Export ist noch keine native .pro-Datei.</p>
+  </section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let slides=[], selected=-1;
+function render(){
+  $('slides').innerHTML='';
+  slides.forEach((s,i)=>{const d=document.createElement('div');d.className='slide'+(i===selected?' active':'');d.innerHTML=`<strong>${escapeHtml(s.title||'Folie '+(i+1))}</strong><small>${escapeHtml((s.body||'').slice(0,65))}</small>`;d.onclick=()=>select(i);$('slides').append(d)});
+  if(selected>=0&&slides[selected]){const s=slides[selected];$('slideTitle').value=s.title;$('slideBody').value=s.body;$('screen').innerHTML=`<h3>${escapeHtml(s.title)}</h3><p>${escapeHtml(s.body)}</p>`}
+  else {$('slideTitle').value='';$('slideBody').value='';$('screen').innerHTML='<h3>Noch keine Folie</h3><p>Erstelle oder wähle eine Folie.</p>'}
+}
+function escapeHtml(x){return String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function select(i){selected=i;render()}
+$('parse').onclick=()=>{const lines=$('source').value.split(/\n+/).map(x=>x.trim()).filter(Boolean);slides=lines.map((line,i)=>({title:/\b\d?\s?[A-Za-zÄÖÜäöü]+\s?\d+[:.]\d+/.test(line)?'Bibelstelle':line.replace(/^[-*•\d.)\s]+/,'').slice(0,55)||'Folie '+(i+1),body:line}));selected=slides.length?0:-1;render();$('status').textContent=slides.length+' Folienvorschläge erstellt.'};
+$('add').onclick=()=>{slides.push({title:'Neue Folie',body:''});select(slides.length-1)};
+$('duplicate').onclick=()=>{if(selected<0)return;slides.splice(selected+1,0,{...slides[selected]});select(selected+1)};
+$('remove').onclick=()=>{if(selected<0)return;slides.splice(selected,1);selected=slides.length?Math.min(selected,slides.length-1):-1;render()};
+function move(delta){if(selected<0)return;const j=selected+delta;if(j<0||j>=slides.length)return;[slides[selected],slides[j]]=[slides[j],slides[selected]];select(j)}
+$('up').onclick=()=>move(-1);$('down').onclick=()=>move(1);
+$('save').onclick=()=>{if(selected<0)return;slides[selected]={title:$('slideTitle').value,body:$('slideBody').value};render()};
+$('theme').onchange=()=>document.querySelector('.screen').style.background=$('theme').value.includes('hell')?'#f4f5f7':'linear-gradient(135deg,#18283c,#101722)';
+$('addTheme').onclick=()=>{const n=$('themeName').value.trim();if(!n)return;const o=document.createElement('option');o.textContent=n;$('theme').append(o);$('theme').value=n;$('themeName').value='';$('status').textContent='Theme-Name vorgemerkt.'};
+$('export').onclick=()=>{const blob=new Blob([JSON.stringify({app:'PP7 file creator',theme:$('theme').value,slides},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sermon-entwurf.json';a.click();URL.revokeObjectURL(a.href)};
+render();
+</script>
+</body>
+</html>
