@@ -66,7 +66,7 @@ const referenceRegex = new RegExp(`(?:\\(\\s*${referenceCore}\\s*\\)|${reference
 // Zeilenbreite hängt von Schriftbild und Wortlängen ab. Der Wert ist bewusst
 // mit Sicherheitsabstand gewählt, damit PP7-Textfelder nicht bis an den Rand
 // gefüllt werden. Verse bleiben weiterhin ungeteilt.
-const BIBLE_SLIDE_TEXT_BUDGET = 220;
+const BIBLE_SLIDE_TEXT_BUDGET = 360;
 const BIBLE_VERSE_CHUNK_BUDGET = 200;
 
 function clean(value) {
@@ -230,22 +230,87 @@ function splitLongVerse(verse, maxChars = BIBLE_VERSE_CHUNK_BUDGET) {
 }
 
 function groupTextWithoutVerseBoundaries(verses, maxChars = BIBLE_SLIDE_TEXT_BUDGET) {
-  // Ab vier Versen wird der gesamte Abschnitt als fortlaufender Text behandelt.
-  // Die Versnummern bleiben im Text erhalten (und werden im Export weiterhin
-  // hochgestellt), sind aber keine erzwungenen Trennstellen mehr.
-  const words = verses.join(' ').replace(/\s+/g, ' ').trim().split(' ');
-  const groups = [];
-  let current = '';
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (current && candidate.length > maxChars) {
-      groups.push(current);
-      current = word;
-    } else {
-      current = candidate;
+  // Lange Abschnitte werden an sinnvollen sprachlichen Grenzen geteilt.
+  // Versenden haben Vorrang, danach Satzzeichen (Punkt/Komma usw.). Nur wenn
+  // ein einzelner Abschnitt sonst zu lang würde, dienen Wortgrenzen als Fallback.
+  const text = verses.join(' ').replace(/\s+/g, ' ').trim();
+  if (!text) return [];
+
+  const boundaries = new Map();
+  const addBoundary = (position, penalty) => {
+    const pos = text.slice(0, position).trimEnd().length;
+    if (pos <= 0 || pos >= text.length) return;
+    const previous = boundaries.get(pos);
+    if (previous === undefined || penalty < previous) boundaries.set(pos, penalty);
+  };
+
+  // Versenden sind bevorzugte Trennstellen.
+  let offset = 0;
+  for (const verse of verses.slice(0, -1)) {
+    offset += verse.length;
+    addBoundary(offset, 0);
+    offset += 1; // Leerzeichen zwischen den Versen
+  }
+
+  // Satz- und Teilsatzgrenzen: Punkt/Frage-/Ausrufezeichen vor Komma.
+  for (const match of text.matchAll(/[.!?;:](?=\s|$)|,(?=\s|$)/g)) {
+    const punctuationEnd = match.index + 1;
+    addBoundary(punctuationEnd, /[,;]/.test(match[0]) ? 2 : 1);
+  }
+
+  // Wortgrenzen bleiben als Notlösung verfügbar, damit auch sehr lange
+  // Sätze vollständig und ohne abgeschnittene Wörter aufgeteilt werden.
+  for (const match of text.matchAll(/\s+/g)) addBoundary(match.index, 8);
+
+  const points = [{ position: 0, penalty: 0 }, ...[...boundaries.entries()]
+    .map(([position, penalty]) => ({ position, penalty }))
+    .sort((a, b) => a.position - b.position)];
+  points.push({ position: text.length, penalty: 0 });
+
+  // Dynamische Programmierung: zuerst minimale Folienzahl, dann möglichst
+  // gleichmäßige Textmengen; sinnvolle Satz-/Versgrenzen werden bevorzugt.
+  const best = Array(points.length).fill(null);
+  const endIndex = points.length - 1;
+  best[endIndex] = { count: 0, cost: 0, next: -1 };
+  for (let i = endIndex - 1; i >= 0; i--) {
+    for (let j = i + 1; j <= endIndex; j++) {
+      const start = points[i].position;
+      const finish = points[j].position;
+      const length = finish - start;
+      if (length > maxChars) break;
+      if (!best[j]) continue;
+      const candidate = {
+        count: best[j].count + 1,
+        cost: best[j].cost + (length * length) + (j === endIndex ? 0 : points[j].penalty * 1800),
+        next: j
+      };
+      if (!best[i] || candidate.count < best[i].count ||
+          (candidate.count === best[i].count && candidate.cost < best[i].cost)) best[i] = candidate;
     }
   }
-  if (current) groups.push(current);
+
+  if (!best[0]) {
+    // Extrem lange Einzelpassagen: die sichere Wortgrenzen-Aufteilung.
+    const chunks = [];
+    let current = '';
+    for (const word of text.split(/\s+/)) {
+      const next = current ? `${current} ${word}` : word;
+      if (current && next.length > maxChars) {
+        chunks.push(current);
+        current = word;
+      } else current = next;
+    }
+    if (current) chunks.push(current);
+    return chunks;
+  }
+
+  const groups = [];
+  let index = 0;
+  while (index !== endIndex) {
+    const next = best[index].next;
+    groups.push(text.slice(points[index].position, points[next].position).trim());
+    index = next;
+  }
   return groups;
 }
 

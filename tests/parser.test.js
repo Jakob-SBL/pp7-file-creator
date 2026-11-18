@@ -5,13 +5,13 @@ import { parseSermonEmail } from '../src/parser.js';
 test('teilt 1. Korinther 10:1-4 bei mindestens vier Versen unabhängig von Versgrenzen', () => {
   const email = `2.        1. Korinther 10:1-4 (NGÜ)\nIhr dürft nämlich nicht vergessen, Geschwister, wie es unseren Vorfahren ´zur Zeit des Mose\u0060 erging. Über ihnen allen war die Wolkensäule, und alle durchquerten sie das Meer, 2sodass sie alle gewissermaßen eine Taufe auf Mose erlebten – eine Taufe durch die Wolke und durch das Meer. 3Sie aßen alle dieselbe Nahrung – das Brot vom Himmel, das Gott ihnen gab –, 4und tranken alle denselben Trank – einen Trank, den Gott ihnen gab, das Wasser aus dem Felsen (wobei der wahre Fels, der sie begleitete und von dessen Wasser sie tranken, Christus war`;
   const slides = parseSermonEmail(email);
-  assert.equal(slides.length, 3, 'the shorter text budget deliberately favors more readable slides');
+  assert.equal(slides.length, 2, 'the available text area should be used more fully');
   assert.ok(slides.every(s => s.reference === '1. Korinther 10:1-4 (NGÜ)'));
   const combined = slides.map(s => s.content).join(' ');
   assert.match(combined, /^1 Ihr/);
   for (const verse of [1, 2, 3, 4]) assert.match(combined, new RegExp(`(?:^|\\s)${verse}\\s`));
   assert.match(combined, /Christus war$/);
-  assert.ok(slides.every(s => s.content.length <= 220));
+  assert.ok(slides.every(s => s.content.length <= 360));
   assert.ok(slides.some(s => !/^\\d{1,3}\\s/.test(s.content)), 'a slide may start within a verse');
 });
 
@@ -32,7 +32,7 @@ test('ergänzt die erste Versnummer nicht doppelt, wenn sie bereits im Text steh
 test('teilt 1. Samuel 16,11-13 auch bei geschützten Leerzeichen nach Versnummern', () => {
   const email = `Dann fragte er: »Sind das alle deine Söhne?« Isai antwortete: »Der jüngste fehlt noch. Er hütet gerade die Schafe und Ziegen.« »Lass ihn holen!«, forderte Samuel ihn auf. »Wir setzen uns nicht ´zum Opfermahl\`, bevor er bei uns ist.«\u200212 Da ließ Isai ihn holen. David sah gut aus, er war gebräunt[6] und hatte schöne Augen. »Er ist es«, sagte der HERR zu Samuel, »salbe ihn zum König!«\u200213 Samuel nahm das Horn mit dem Öl und salbte ihn vor den Augen seiner Brüder zum König. Von diesem Tag an kam der Geist des HERRN über David und verließ ihn nicht mehr. Samuel aber kehrte nach Rama zurück.\n1. Samuel 16,11-13`;
   const slides = parseSermonEmail(email);
-  assert.equal(slides.length, 3, 'the passage should be split conservatively to avoid text overflow');
+  assert.equal(slides.length, 2, 'the passage should use the available space more fully');
   assert.ok(slides.every(s => s.type === 'bible'));
   assert.ok(slides.every(s => s.reference === '1. Samuel 16,11-13'));
   assert.ok(slides.every(s => s.passageGroupId === slides[0].passageGroupId), 'all split slides share a visual passage group');
@@ -40,7 +40,7 @@ test('teilt 1. Samuel 16,11-13 auch bei geschützten Leerzeichen nach Versnummer
   assert.ok(slides.some(s => /12\s*Da ließ Isai/.test(s.content)));
   assert.ok(slides.some(s => /13\s*Samuel nahm/.test(s.content)));
   assert.match(slides.at(-1).content, /Rama zurück\.$/);
-  assert.ok(slides.every(s => s.content.length <= 350), 'each slide stays below the conservative text budget');
+  assert.ok(slides.every(s => s.content.length <= 360), 'each slide stays below the conservative text budget');
 });
 
 test('erkennt eine nachgestellte, eingeklammerte Kurzreferenz als Bibelstelle', () => {
@@ -120,7 +120,7 @@ test('teilt Galater 5,16–26 NGÜ trotz ungeklämmerter Übersetzungsangabe vo
   assert.match(combined, /^16 Was will ich damit sagen\?/);
   assert.match(combined, /25 Da wir also/);
   assert.match(combined, /bestimmen lassen\.$/);
-  assert.ok(slides.every(slide => slide.content.length <= 350));
+  assert.ok(slides.every(slide => slide.content.length <= 360));
 });
 
 
@@ -219,7 +219,7 @@ test('teilt den langen Text zu 4. Mose 27, 3+4 zuverlässig auf mehrere Folien',
   assert.ok(slides.every(slide => slide.type === 'bible'));
   assert.ok(slides.every(slide => slide.reference === '4. Mose 27, 3+4 (NGÜ)'));
   assert.ok(slides.every(slide => slide.passageGroupId === slides[0].passageGroupId));
-  assert.ok(slides.every(slide => slide.content.length <= 200), 'each chunk stays within the single-verse chunk budget');
+  assert.ok(slides.every(slide => slide.content.length <= 360), 'each chunk stays within the single-verse chunk budget');
   const combined = slides.map(slide => slide.content).join(' ').replace(/\s+/g, ' ').trim();
   assert.ok(combined.includes('Unser Vater ist in der Wüste gestorben.'));
   assert.ok(combined.includes('Gebt uns Grundbesitz, damit das Erbe unseres Vaters genauso behandelt wird wie das seiner Brüder.'));
@@ -275,7 +275,7 @@ test('teilt auch einen einzelnen sehr langen Bibelvers ohne Textverlust an Wortg
   const body = 'Dieser sehr lange Vers enthält viele wichtige Gedanken und soll auf keinen Fall abgeschnitten werden. '.repeat(8);
   const slides = parseSermonEmail(`Johannes 3,16\n16 ${body.trim()}`);
   assert.ok(slides.length > 1, 'one oversized verse must be split across slides');
-  assert.ok(slides.every(slide => slide.content.length <= 220));
+  assert.ok(slides.every(slide => slide.content.length <= 360));
   const combined = slides.map(slide => slide.content.replace(/^16\s*/, '')).join(' ');
   assert.equal(combined.replace(/\s+/g, ' ').trim(), body.trim().replace(/\s+/g, ' '));
 });
@@ -287,7 +287,7 @@ test('teilt Bibelabschnitte ab vier Versen unabhängig von Versgrenzen', () => {
   const verse4 = '19 Dieser vierte Vers schließt den Abschnitt mit einer letzten ausführlichen Aussage und bleibt vollständig erhalten.';
   const slides = parseSermonEmail(`Galater 5,16-19\n${verse1} ${verse2} ${verse3} ${verse4}`);
   assert.ok(slides.length > 1);
-  assert.ok(slides.every(slide => slide.content.length <= 220));
+  assert.ok(slides.every(slide => slide.content.length <= 360));
   const combined = slides.map(slide => slide.content).join(' ');
   assert.equal(combined.replace(/\s+/g, ' ').trim(), [verse1, verse2, verse3, verse4].join(' '));
   assert.ok(slides.some(slide => !/^\\d{1,3}\\s/.test(slide.content)), 'at least one slide should be allowed to begin inside a verse');
