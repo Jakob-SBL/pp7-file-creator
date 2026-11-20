@@ -167,7 +167,7 @@ function transformMessage(bytes, replacements) {
  */
 export function createNativeSlide(templateBytes, slide) {
   if (!(templateBytes instanceof Uint8Array)) throw new Error('Die PP7-Vorlage konnte nicht geladen werden.');
-  if (!slide || !['point', 'bible', 'quote'].includes(slide.type)) throw new Error('Unbekannter Folientyp.');
+  if (!slide || !['point', 'bible', 'quote', 'baptism'].includes(slide.type)) throw new Error('Unbekannter Folientyp.');
 
   // Das Stichpunkt-Theme ist in PP7 konsequent in Versalien gestaltet.
   // Den Inhalt deshalb beim Export unabhängig von der Eingabe-Schreibweise
@@ -175,7 +175,7 @@ export function createNativeSlide(templateBytes, slide) {
   const replacements = slide.type === 'point'
     ? [{ text: String(slide.content ?? '').toLocaleUpperCase('de-DE') }]
     : [
-        { text: slide.content ?? '', superscriptVerseNumbers: slide.type === 'bible' },
+        { text: slide.type === 'baptism' ? `${slide.name ?? ''}\n${slide.content ?? ''}` : (slide.content ?? ''), superscriptVerseNumbers: slide.type === 'bible' || slide.type === 'baptism' },
         { text: slide.type === 'quote' ? (slide.author ?? '') : (slide.reference ?? '') }
       ];
 
@@ -272,7 +272,7 @@ export function createNativePresentation(slides, templates) {
 
     // Ein Punkt ist immer eine eigene Gruppe. Aufeinanderfolgende Folien
     // derselben aufgeteilten Bibelstelle teilen dagegen eine Gruppe.
-    const groupName = slide.type === 'point' ? 'Punkt' : slide.type === 'quote' ? 'Zitat' : (slide.reference || 'Bibelstelle');
+    const groupName = slide.type === 'point' ? 'Punkt' : slide.type === 'quote' ? 'Zitat' : slide.type === 'baptism' ? (slide.name || 'Taufe') : (slide.reference || 'Bibelstelle');
     const groupKey = slide.type === 'point' ? `point:${index}` : `${slide.type}:${groupName}`;
     if (groupKey !== lastGroupKey) groupNumber++;
     lastGroupKey = groupKey;

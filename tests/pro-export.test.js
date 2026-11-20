@@ -184,3 +184,23 @@ test('verwendet eine große abwechslungsreiche Farbpalette für Bibelstellen-Gru
     assert.ok(!(color[0] < 0.12 && color[1] < 0.12 && color[2] < 0.12), `Schwarze Gruppenfarbe gefunden: ${color}`);
   }
 });
+
+
+test('exportiert eine Tauffolie mit Name oberhalb des Bibeltexts und Bibelstelle im Referenzfeld', () => {
+  const output = createNativeSlide(bibleTemplate, {
+    type: 'baptism', name: 'Claudia', content: 'Denn der Herr ist deine Zuversicht.', reference: 'Psalm 91,9-12 (LUT)'
+  });
+  const text = asLatin1(output);
+  assert.ok(text.includes('Claudia\\line Denn der Herr ist deine Zuversicht.'));
+  assert.ok(text.includes('Psalm 91,9-12 (LUT)'));
+});
+
+test('verwendet bei Tauffolien den Namen der Person als PP7-Gruppennamen', () => {
+  const output = createNativePresentation([
+    { type: 'baptism', name: 'Claudia', content: 'Ein Bibelvers.', reference: 'Psalm 91,9-12 (LUT)' }
+  ], { bible: bibleTemplate, point: pointTemplate });
+  const metadata = rootFields(output).find(field => field.number === 12);
+  const group = rootFields(metadata.value).find(field => field.number === 1);
+  const name = rootFields(group.value).find(field => field.number === 2);
+  assert.equal(new TextDecoder().decode(name.value), 'Claudia');
+});

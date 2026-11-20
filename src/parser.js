@@ -52,7 +52,11 @@ function expandBookAbbreviation(reference) {
 
 BOOKS.push(...BOOK_ABBREVIATIONS.flatMap(([short]) => [short, `${short}.`]));
 
-const bookPattern = BOOKS.map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).sort((a,b)=>b.length-a.length).join('|');
+const bookPattern = BOOKS.map(x => {
+  const numbered = x.match(/^([1-5])\.\s+(.+)$/);
+  if (numbered) return `${numbered[1]}\\.\\s*${numbered[2].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`;
+  return x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}).sort((a,b)=>b.length-a.length).join('|');
 const referenceCore = `\\b(?:${bookPattern})\\s+\\d+(?:\\s*[:,.]\\s*\\d+[a-b]?(?:\\s*[-–]\\s*\\d+[a-b]?)?(?:\\s*[,;+]\\s*\\d+[a-b]?(?:\\s*[-–]\\s*\\d+[a-b]?)?)*)?`;
 // Unterstützt sowohl „Joh 15,16“ als auch „(Joh 15,16)“ sowie Referenzen
 // vor dem Text mit Übersetzungsangabe wie „(NGÜ)“.
@@ -357,7 +361,7 @@ function parseBlock(block) {
     // Übersetzungsangabe wie (NGÜ) bei vorangestellter Referenz bleibt erhalten.
     const wrappedReference = /^\(\s*.+\s*\)$/.test(rawReference);
     const extractedReference = wrappedReference ? rawReference.replace(/^\(\s*|\s*\)$/g, '') : rawReference;
-    const reference = expandBookAbbreviation(extractedReference);
+    const reference = expandBookAbbreviation(extractedReference).replace(/^([1-5])\.\s*(?=[\p{L}])/u, '$1. ');
     // Entfernt auch eine vorangestellte E-Mail-Nummerierung wie „2. 1. Korinther …“.
     const beforeReference = joined.slice(0, refMatch.index);
     const afterReference = joined.slice(refMatch.index + rawReference.length);
@@ -391,9 +395,53 @@ function parseBlock(block) {
   return [makePoint(joined)];
 }
 
+function parseBaptismBlock(text) {
+  // E-Mail-Kopien können mehrere Tauf-Einträge ohne Leerzeilen oder sogar
+  // vollständig in einer einzigen Textzeile enthalten. Deshalb an jedem
+  // „Name:“ beginnen und den jeweiligen Abschnitt bis zum nächsten Namen lesen.
+  const normalized = String(text ?? '').replace(/\*\*/g, '').replace(/\r\n?/g, '\n').trim();
+  const nameMarkers = [...normalized.matchAll(/(?:^|\s)Name\s*:\s*/gi)];
+  if (!nameMarkers.length) return null;
+
+  const slides = [];
+  const prefix = normalized.slice(0, nameMarkers[0].index).trim();
+  if (prefix) slides.push(...parseBlock(prefix));
+  for (let i = 0; i < nameMarkers.length; i++) {
+    const marker = nameMarkers[i];
+    const segmentStart = marker.index + marker[0].length;
+    const segmentEnd = i + 1 < nameMarkers.length ? nameMarkers[i + 1].index : normalized.length;
+    const segment = normalized.slice(segmentStart, segmentEnd).trim();
+    const verseLabel = segment.match(/\bVers\s*:\s*/i);
+    if (!verseLabel) continue;
+
+    const name = segment.slice(0, verseLabel.index).trim().replace(/[,:;]+$/, '').trim();
+    if (!name) continue;
+
+    const afterVerseLabel = segment.slice(verseLabel.index + verseLabel[0].length).trim();
+    const refMatch = afterVerseLabel.match(referenceRegex);
+    let reference = '';
+    let content = '';
+    if (refMatch) {
+      reference = expandBookAbbreviation(refMatch[0]).replace(/^([1-5])\.\s*(?=[\p{L}])/u, '$1. ');
+      content = afterVerseLabel.slice(refMatch.index + refMatch[0].length);
+    } else if (!/^\(?\s*tbd\s*\)?$/i.test(afterVerseLabel)) {
+      // Wenn nach „Vers:“ kein Referenzformat erkannt wird, bleibt der
+      // restliche Text erhalten, statt ihn stillschweigend zu verwerfen.
+      content = afterVerseLabel;
+    }
+
+    content = content.replace(/^\s*[:–—-]?\s*/, '').replace(/\s+/g, ' ')
+      .replace(/^[“„"]|[”"“]$/g, '').trim();
+    slides.push({ id: crypto.randomUUID(), type: 'baptism', name, reference, content, warning: false });
+  }
+  return slides.length ? slides : null;
+}
+
 export function parseSermonEmail(text) {
   text = removeNumericBracketMarkers(text);
   if (!text || !text.trim()) return [];
+  const baptism = parseBaptismBlock(text);
+  if (baptism) return baptism;
   const blocks = text.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
   // Falls die Bibelstellenangabe in der E-Mail als eigener Absatz direkt
   // unter dem Bibeltext steht, wird sie mit diesem Textblock verbunden.

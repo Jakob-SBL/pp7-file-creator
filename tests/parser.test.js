@@ -293,3 +293,40 @@ test('teilt Bibelabschnitte ab vier Versen unabhängig von Versgrenzen', () => {
   assert.ok(slides.some(slide => !/^\\d{1,3}\\s/.test(slide.content)), 'at least one slide should be allowed to begin inside a verse');
   for (const verse of [16, 17, 18, 19]) assert.match(combined, new RegExp(`(?:^|\\s)${verse}\\s`));
 });
+
+
+test('erkennt nummerierte Bibelbücher auch ohne Leerzeichen nach dem Punkt', () => {
+  for (const [input, expected] of [
+    ['1.Petrus 5,6', '1. Petrus 5,6'],
+    ['4.Mose 27,3-4', '4. Mose 27,3-4'],
+    ['2.Korinther 5,17', '2. Korinther 5,17']
+  ]) {
+    const slides = parseSermonEmail(`${input}\nEin Beispieltext.`);
+    assert.equal(slides[0].type, 'bible');
+    assert.equal(slides[0].reference, expected);
+  }
+});
+
+test('erkennt einen Taufblock mit Name und Vers als eigene Tauffolie', () => {
+  const slides = parseSermonEmail(`Name: Claudia\n\nVers: Psalm 91,9-12 (LUT)\n\n“Denn der Herr ist deine Zuversicht, der Höchste ist deine Zuflucht. Es wird dir kein Übel begegnen.“`);
+  assert.equal(slides.length, 1);
+  assert.equal(slides[0].type, 'baptism');
+  assert.equal(slides[0].name, 'Claudia');
+  assert.equal(slides[0].reference, 'Psalm 91,9-12 (LUT)');
+  assert.equal(slides[0].content, 'Denn der Herr ist deine Zuversicht, der Höchste ist deine Zuflucht. Es wird dir kein Übel begegnen.');
+  assert.doesNotMatch(slides[0].content, /Name:|Vers:/);
+});
+
+test('erkennt mehrere Tauf-Einträge auch ohne Leerzeilen und entfernt alle Name-/Vers-Labels', () => {
+  const email = `Name: Katharina Vers: 1. Johannes 4,16 (LUT) „Gott ist die Liebe; und wer in der Liebe bleibt, der bleibt in Gott und Gott in ihm.“ Name: Marina Vers: Psalm 23, 1+6 (LUT) “Der Herr ist mein Hirte; mir wird nichts mangeln.” “Gutes und Barmherzigkeit werden mir folgen mein Leben lang und ich werde bleiben im Hause des Herrn immerdar.“ Name: Christian Vers: (tbd) Name: Tamara Vers: (tbd) Name: Celina Vers: Johannes 8,12 (NGÜ) “Ich bin das Licht der Welt.”`;
+  const slides = parseSermonEmail(email);
+  assert.deepEqual(slides.map(slide => slide.name), ['Katharina', 'Marina', 'Christian', 'Tamara', 'Celina']);
+  assert.ok(slides.every(slide => slide.type === 'baptism'));
+  assert.equal(slides[0].reference, '1. Johannes 4,16 (LUT)');
+  assert.match(slides[0].content, /Gott ist die Liebe/);
+  assert.equal(slides[1].reference, 'Psalm 23, 1+6 (LUT)');
+  assert.equal(slides[2].reference, '');
+  assert.equal(slides[3].reference, '');
+  assert.equal(slides[4].reference, 'Johannes 8,12 (NGÜ)');
+  assert.ok(slides.every(slide => !/Name:|Vers:/.test(`${slide.name} ${slide.reference} ${slide.content}`)));
+});

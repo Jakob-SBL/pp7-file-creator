@@ -29,13 +29,12 @@ let pendingDeletion = null;
 let undoTimer = null;
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const labelFor = slide => slide.type === 'bible' ? 'Bibelstelle' : slide.type === 'quote' ? 'Zitat' : 'Punkt';
+const labelFor = slide => slide.type === 'bible' ? 'Bibelstelle' : slide.type === 'baptism' ? 'Taufe' : slide.type === 'quote' ? 'Zitat' : 'Punkt';
 
 function previewMarkup(slide) {
-  const sub = slide.type === 'bible' ? slide.reference : slide.type === 'quote' ? slide.author : '';
-  const body = slide.type === 'bible'
-    ? escapeHtml(slide.content || '').replace(/(^|\s)(\d{1,3})\s*(?=[\p{L}„“"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`)
-    : escapeHtml(slide.content || '');
+  const sub = ['bible', 'baptism'].includes(slide.type) ? slide.reference : slide.type === 'quote' ? slide.author : '';
+  const bibleBody = escapeHtml(slide.content || '').replace(/(^|\s)(\d{1,3})\s*(?=[\p{L}„“"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`);
+  const body = slide.type === 'bible' ? bibleBody : slide.type === 'baptism' ? `${escapeHtml(slide.name || '')}<br>${bibleBody}` : escapeHtml(slide.content || '');
   const theme = slide.type === 'point' ? 'point-theme-preview' : slide.type === 'quote' ? 'quote-theme-preview' : 'bible-theme-preview';
   return `<div class="preview-screen ${theme}"><div class="preview-main">${body}</div><div class="preview-sub">${escapeHtml(sub || '')}</div></div>`;
 }
@@ -46,10 +45,11 @@ function updateCardPreview(index) {
   const slide = slides[index];
   card.querySelector('.preview-wrap').innerHTML = `${previewMarkup(slide)}<div class="preview-caption">VORSCHAU · 16:9</div>`;
   card.querySelector('.slide-heading').textContent = `${index + 1}. ${labelFor(slide)}`;
-  card.querySelector('.slide-summary').textContent = slide.type === 'bible' ? slide.reference || 'Ohne Referenz' : slide.type === 'quote' ? slide.author || 'Zitat' : (slide.content || 'Ohne Text').slice(0, 90);
-  card.querySelector('.reference-field').hidden = slide.type !== 'bible';
+  card.querySelector('.slide-summary').textContent = ['bible', 'baptism'].includes(slide.type) ? (slide.type === 'baptism' ? slide.name : slide.reference) || 'Ohne Angabe' : slide.type === 'quote' ? slide.author || 'Zitat' : (slide.content || 'Ohne Text').slice(0, 90);
+  card.querySelector('.reference-field').hidden = !['bible', 'baptism'].includes(slide.type);
   card.querySelector('.author-field').hidden = slide.type !== 'quote';
-  card.querySelector('.content-label-text').textContent = slide.type === 'bible' ? 'Bibeltext' : slide.type === 'quote' ? 'Zitattext' : 'Text';
+  card.querySelector('.name-field').hidden = slide.type !== 'baptism';
+  card.querySelector('.content-label-text').textContent = slide.type === 'bible' || slide.type === 'baptism' ? 'Bibeltext' : slide.type === 'quote' ? 'Zitattext' : 'Text';
   card.querySelector('.type-input').value = slide.type;
 }
 
@@ -70,14 +70,15 @@ function render() {
     const groupNote = passageInfo ? `<small class="passage-group-note">Zusammengehörige Bibelstelle · Teil ${passageInfo.part} von ${passageInfo.total}</small>` : '';
     return `
     <article class="slide-editor-card${groupClass}" data-slide-index="${index}" ${slide.passageGroupId ? `data-passage-group="${escapeHtml(slide.passageGroupId)}"` : ''}>
-      <div class="slide-card-heading"><div><span class="slide-heading">${index + 1}. ${labelFor(slide)}</span><small class="slide-summary">${escapeHtml(slide.type === 'bible' ? slide.reference || 'Ohne Referenz' : slide.type === 'quote' ? slide.author || 'Zitat' : (slide.content || 'Ohne Text').slice(0, 90))}</small>${groupNote}</div><div class="card-actions"><button class="secondary small move-up" ${index === 0 ? 'disabled' : ''} title="Nach oben">↑</button><button class="secondary small move-down" ${index === slides.length - 1 ? 'disabled' : ''} title="Nach unten">↓</button><button class="secondary small duplicate-slide">Duplizieren</button><button class="danger small delete-slide">Löschen</button></div></div>
+      <div class="slide-card-heading"><div><span class="slide-heading">${index + 1}. ${labelFor(slide)}</span><small class="slide-summary">${escapeHtml(['bible', 'baptism'].includes(slide.type) ? (slide.type === 'baptism' ? slide.name : slide.reference) || 'Ohne Angabe' : slide.type === 'quote' ? slide.author || 'Zitat' : (slide.content || 'Ohne Text').slice(0, 90))}</small>${groupNote}</div><div class="card-actions"><button class="secondary small move-up" ${index === 0 ? 'disabled' : ''} title="Nach oben">↑</button><button class="secondary small move-down" ${index === slides.length - 1 ? 'disabled' : ''} title="Nach unten">↓</button><button class="secondary small duplicate-slide">Duplizieren</button><button class="danger small delete-slide">Löschen</button></div></div>
       <div class="slide-editor-layout">
         <div class="preview-wrap">${previewMarkup(slide)}<div class="preview-caption">VORSCHAU · 16:9</div></div>
         <div class="fields">
-          <label>Folientyp / Theme<select class="type-input"><option value="bible" ${slide.type === 'bible' ? 'selected' : ''}>Bibelstelle</option><option value="point" ${slide.type === 'point' ? 'selected' : ''}>Punkt</option><option value="quote" ${slide.type === 'quote' ? 'selected' : ''}>Zitat</option></select></label>
-          <div class="reference-field" ${slide.type !== 'bible' ? 'hidden' : ''}><label>Bibelstelle inklusive Übersetzung<input class="reference-input" type="text" value="${escapeHtml(slide.reference || '')}" placeholder="z. B. Johannes 14,26 (NGÜ)"></label></div>
+          <label>Folientyp / Theme<select class="type-input"><option value="bible" ${slide.type === 'bible' ? 'selected' : ''}>Bibelstelle</option><option value="point" ${slide.type === 'point' ? 'selected' : ''}>Punkt</option><option value="quote" ${slide.type === 'quote' ? 'selected' : ''}>Zitat</option><option value="baptism" ${slide.type === 'baptism' ? 'selected' : ''}>Taufe</option></select></label>
+          <div class="name-field" ${slide.type !== 'baptism' ? 'hidden' : ''}><label>Name der getauften Person<input class="name-input" type="text" value="${escapeHtml(slide.name || '')}" placeholder="z. B. Claudia"></label></div>
+          <div class="reference-field" ${!['bible', 'baptism'].includes(slide.type) ? 'hidden' : ''}><label>Bibelstelle inklusive Übersetzung<input class="reference-input" type="text" value="${escapeHtml(slide.reference || '')}" placeholder="z. B. Psalm 91,9-12 (LUT)"></label></div>
           <div class="author-field" ${slide.type !== 'quote' ? 'hidden' : ''}><label>Autor<input class="author-input" type="text" value="${escapeHtml(slide.author || '')}" placeholder="Name des Autors"></label></div>
-          <label class="content-label"><span class="content-label-text">${slide.type === 'bible' ? 'Bibeltext' : slide.type === 'quote' ? 'Zitattext' : 'Text'}</span><textarea class="content-input">${escapeHtml(slide.content || '')}</textarea></label>
+          <label class="content-label"><span class="content-label-text">${slide.type === 'bible' || slide.type === 'baptism' ? 'Bibeltext' : slide.type === 'quote' ? 'Zitattext' : 'Text'}</span><textarea class="content-input">${escapeHtml(slide.content || '')}</textarea></label>
           <span class="hint edit-hint">Änderungen werden direkt übernommen.</span>
         </div>
       </div>
@@ -108,6 +109,7 @@ function render() {
     card.querySelector('.type-input').addEventListener('change', e => { slide.type = e.target.value; updateCardPreview(index); });
     card.querySelector('.reference-input').addEventListener('input', e => { slide.reference = e.target.value; updateCardPreview(index); });
     card.querySelector('.author-input').addEventListener('input', e => { slide.author = e.target.value; updateCardPreview(index); });
+    card.querySelector('.name-input').addEventListener('input', e => { slide.name = e.target.value; updateCardPreview(index); });
     card.querySelector('.content-input').addEventListener('input', e => { slide.content = e.target.value; updateCardPreview(index); });
     card.querySelector('.duplicate-slide').addEventListener('click', () => { slides.splice(index + 1, 0, { ...slide, id: crypto.randomUUID() }); render(); });
     card.querySelector('.delete-slide').addEventListener('click', () => {
