@@ -330,3 +330,30 @@ test('erkennt mehrere Tauf-Einträge auch ohne Leerzeilen und entfernt alle Name
   assert.equal(slides[4].reference, 'Johannes 8,12 (NGÜ)');
   assert.ok(slides.every(slide => !/Name:|Vers:/.test(`${slide.name} ${slide.reference} ${slide.content}`)));
 });
+
+test('erkennt formatierte Tauf-E-Mails mit Bibelstelle vor dem Vers und HTML-Zeichenreferenzen', () => {
+  const email = `**Name: Claudia**
+
+**Vers: Psalm 91,9-12 (LUT)**
+
+**“**&#x44;enn der Herr ist deine Zuversicht, der Höchste ist deine Zuflucht. Es wird dir kein Übel begegnen, und keine Plage wird sich deinem Hause nahen. Denn er hat seinen Engeln befohlen über dir, dass sie dich behüten auf allen deinen Wegen, dass sie dich auf Händen tragen und du deinen Fuß nicht an einen Stein stoßest.“
+
+**Name: Katharina**
+
+**Vers: 1. Johannes 4,16 (LUT)**
+
+„Gott ist die Liebe; und wer in der Liebe bleibt, der bleibt in Gott und Gott in ihm.“
+
+**Name: Jennifer**
+
+**Vers:&#xA0;**(tbd)&#x20;`;
+  const slides = parseSermonEmail(email);
+  assert.deepEqual(slides.map(slide => slide.name), ['Claudia', 'Katharina', 'Jennifer']);
+  assert.ok(slides.every(slide => slide.type === 'baptism'));
+  assert.equal(slides[0].reference, 'Psalm 91,9-12 (LUT)');
+  assert.ok(slides[0].content.startsWith('Denn der Herr ist deine Zuversicht'));
+  assert.equal(slides[1].reference, '1. Johannes 4,16 (LUT)');
+  assert.match(slides[1].content, /^Gott ist die Liebe/);
+  assert.equal(slides[2].reference, '');
+  assert.equal(slides[2].content, '');
+});

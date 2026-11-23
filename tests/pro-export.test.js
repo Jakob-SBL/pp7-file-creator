@@ -204,3 +204,22 @@ test('verwendet bei Tauffolien den Namen der Person als PP7-Gruppennamen', () =>
   const name = rootFields(group.value).find(field => field.number === 2);
   assert.equal(new TextDecoder().decode(name.value), 'Claudia');
 });
+
+test('exportiert eine Tauffolie ohne feststehenden Bibeltext mit Name und leeren Theme-Textfeldern', () => {
+  const output = createNativeSlide(bibleTemplate, {
+    type: 'baptism', name: 'Jennifer', content: '', reference: ''
+  });
+  const text = asLatin1(output);
+  assert.ok(text.includes('Jennifer\\line '));
+  assert.ok(!text.includes('Psalm 91'));
+  assert.ok(output.length > 1000, 'die vollständige native Theme-Folie bleibt erhalten');
+});
+
+test('nimmt Tauffolien ohne Bibeltext in den Gesamtexport auf', () => {
+  const output = createNativePresentation([
+    { type: 'baptism', name: 'Jennifer', content: '', reference: '' }
+  ], { bible: bibleTemplate, point: pointTemplate });
+  assert.ok(asLatin1(output).includes('Jennifer\\line '));
+  assert.equal(rootFields(output).filter(field => field.number === 12).length, 1);
+  assert.equal(rootFields(output).filter(field => field.number === 13).length, 1);
+});

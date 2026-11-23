@@ -395,11 +395,24 @@ function parseBlock(block) {
   return [makePoint(joined)];
 }
 
+function decodeEmailEntities(value) {
+  const named = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>' };
+  return String(value ?? '').replace(/&(#x[\da-f]+|#\d+|nbsp|amp|quot|apos|lt|gt);/gi, (entity, code) => {
+    if (code[0] !== '#') return named[code.toLowerCase()] ?? entity;
+    const number = code[1].toLowerCase() === 'x' ? Number.parseInt(code.slice(2), 16) : Number.parseInt(code.slice(1), 10);
+    if (!Number.isInteger(number) || number < 0 || number > 0x10ffff || (number >= 0xd800 && number <= 0xdfff)) return entity;
+    // HTML-kopierte E-Mails enthalten häufig NBSP als &#xA0;; als Trennraum normalisieren.
+    return number === 0xa0 ? ' ' : String.fromCodePoint(number);
+  });
+}
+
 function parseBaptismBlock(text) {
   // E-Mail-Kopien können mehrere Tauf-Einträge ohne Leerzeilen oder sogar
   // vollständig in einer einzigen Textzeile enthalten. Deshalb an jedem
   // „Name:“ beginnen und den jeweiligen Abschnitt bis zum nächsten Namen lesen.
-  const normalized = String(text ?? '').replace(/\*\*/g, '').replace(/\r\n?/g, '\n').trim();
+  // Manche Mail-Clients kopieren formatierte Inhalte als HTML-Zeichenreferenzen
+  // (z. B. &#xA0; für Leerzeichen oder &#x44; für D). Diese vor dem Parsen dekodieren.
+  const normalized = decodeEmailEntities(text).replace(/\*\*/g, '').replace(/\r\n?/g, '\n').trim();
   const nameMarkers = [...normalized.matchAll(/(?:^|\s)Name\s*:\s*/gi)];
   if (!nameMarkers.length) return null;
 

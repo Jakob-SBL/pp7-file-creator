@@ -255,7 +255,11 @@ export function createNativePresentation(slides, templates) {
   let lastGroupKey = null;
   let groupNumber = -1;
   const generated = slides.map((slide, index) => {
-    if (!slide?.content?.trim()) throw new Error('Mindestens eine Folie enthält keinen Text. Bitte ergänze den Text vor dem Export.');
+    const hasContent = Boolean(slide?.content?.trim());
+    const hasBaptismName = slide?.type === 'baptism' && Boolean(slide?.name?.trim());
+    // Tauffolien dürfen ohne Bibeltext exportiert werden: Das Namensfeld wird
+    // befüllt, die Text- und Referenzfelder der Vorlage bleiben ansonsten leer.
+    if (!hasContent && !hasBaptismName) throw new Error('Mindestens eine Folie enthält keinen Text. Bitte ergänze den Text vor dem Export.');
     const template = slide.type === 'point' ? templates.point : templates.bible;
     const bytes = createNativeSlide(template, slide);
     const fields = parseMessage(bytes);
