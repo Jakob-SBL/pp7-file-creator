@@ -456,8 +456,15 @@ function parseBaptismBlock(text) {
   return slides.length ? slides : null;
 }
 
+// Entfernt unsichtbare Unicode-Steuerzeichen für Schreibrichtung (Bidi),
+// die Outlook/Apple Mail beim Kopieren in Bibelstellen einfügen können.
+// Sie sind für den Inhalt nicht sichtbar, unterbrechen aber Regex-Erkennung.
+function removeBidiControlCharacters(value) {
+  return String(value ?? '').replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, '');
+}
+
 export function parseSermonEmail(text) {
-  text = String(text ?? '').replace(/\r\n?/g, '\n');
+  text = removeBidiControlCharacters(text).replace(/\r\n?/g, '\n');
   text = removeNumericBracketMarkers(text);
   if (!text || !text.trim()) return [];
 

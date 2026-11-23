@@ -366,3 +366,16 @@ test('verknüpft eine Bibelreferenz am Anfang mit dem folgenden Absatz', () => {
   assert.equal(slides[0].reference, 'Psalm 91,9-12 (LUT)');
   assert.match(slides[0].content, /Denn der Herr ist deine Zuversicht/);
 });
+
+test('erkennt Psalm-Referenzen mit unsichtbaren Unicode-Bidi-Steuerzeichen aus E-Mail-Kopien', () => {
+  const email = `**Name: Emma**
+
+**Vers: Psalm\u202c \u202d139\u202c,\u202d16 (HFA)**
+„Als ich gerade erst entstand, hast du mich schon gesehen. Alle Tage meines Lebens hast du in dein Buch geschrieben – noch bevor einer von ihnen begann!“`;
+  const slides = parseSermonEmail(email);
+  assert.equal(slides.length, 1);
+  assert.equal(slides[0].type, 'baptism');
+  assert.equal(slides[0].name, 'Emma');
+  assert.equal(slides[0].reference, 'Psalm 139,16 (HFA)');
+  assert.match(slides[0].content, /^Als ich gerade erst entstand/);
+});
