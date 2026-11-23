@@ -357,3 +357,12 @@ test('erkennt formatierte Tauf-E-Mails mit Bibelstelle vor dem Vers und HTML-Zei
   assert.equal(slides[2].reference, '');
   assert.equal(slides[2].content, '');
 });
+
+
+test('verknüpft eine Bibelreferenz am Anfang mit dem folgenden Absatz', () => {
+  const slides = parseSermonEmail('Psalm 91,9-12 (LUT)\\n\\nDenn der Herr ist deine Zuversicht, der Höchste ist deine Zuflucht.');
+  assert.equal(slides.length, 1);
+  assert.equal(slides[0].type, 'bible');
+  assert.equal(slides[0].reference, 'Psalm 91,9-12 (LUT)');
+  assert.match(slides[0].content, /Denn der Herr ist deine Zuversicht/);
+});

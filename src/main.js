@@ -157,6 +157,49 @@ document.querySelectorAll('.add-slide-button').forEach(button => button.addEvent
   document.querySelector('.slide-editor-card:last-child')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }));
 
+// Outlook und Apple Mail stellen beim Kopieren oft jede sichtbare Zeile
+// als eigenen HTML-Absatz bereit. Solche Absätze werden zu einfachen
+// Zeilenumbrüchen; wirklich leere Absätze bleiben Folientrenner.
+$('sermon-input').addEventListener('paste', event => {
+  const html = event.clipboardData?.getData('text/html');
+  if (!html) return; // Bei reinem Text das normale Einfügen verwenden.
+
+  event.preventDefault();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const output = [];
+  const blockTags = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DIV', 'LI', 'P', 'SECTION']);
+  const appendBreak = value => {
+    if (value && !value.endsWith('\n')) output.push('\n');
+  };
+  const walk = node => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      output.push(node.nodeValue || '');
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = node.tagName;
+    if (tag === 'BR') { output.push('\n'); return; }
+    const isBlock = blockTags.has(tag);
+    if (isBlock) appendBreak(output.join(''));
+    const before = output.length;
+    for (const child of node.childNodes) walk(child);
+    const content = output.slice(before).join('').trim();
+    if (isBlock) {
+      if (!content) output.push('\n'); // leerer Absatz = bewusste Trennung
+      else appendBreak(output.join(''));
+    }
+  };
+  for (const child of doc.body.childNodes) walk(child);
+  const pastedText = output.join('')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const textarea = event.currentTarget;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  textarea.setRangeText(pastedText, start, end, 'end');
+});
+
 $('create-slides').addEventListener('click', () => {
   const cleanedEmail = removeNumericBracketMarkers($('sermon-input').value);
   $('sermon-input').value = cleanedEmail;

@@ -155,10 +155,16 @@ function extractVerses(text, reference) {
   const firstVerse = range?.first ?? (leadingMarker ? Number(leadingMarker[1]) : null);
   if (!Number.isInteger(firstVerse)) return null;
 
+  // Eine Versnummer darf nur übernommen werden, wenn sie tatsächlich im
+  // eingefügten E-Mail-Text steht. Die Referenz allein (z. B. „27, 6+7“)
+  // ist kein Grund, eine Nummer vor den Bibeltext zu setzen.
+
   // Die erste Versnummer steht häufig direkt am Textanfang. Sie wird einmal
   // entfernt und beim Zusammenstellen der Folien wieder vorangestellt.
   const firstVerseMarker = new RegExp(`^${firstVerse}\\s*(?=[\\p{L}„“»›\\x22\\x27(])`, 'u');
-  text = text.trim().replace(firstVerseMarker, '');
+  const hasLeadingVerseMarker = firstVerseMarker.test(text.trim());
+  if (hasLeadingVerseMarker) text = text.trim().replace(firstVerseMarker, '');
+  else text = text.trim();
 
   const boundaries = [];
   let cursor = 0;
@@ -184,15 +190,15 @@ function extractVerses(text, reference) {
 
   const verses = [];
   let start = 0;
-  let currentVerse = firstVerse;
+  let currentVerse = hasLeadingVerseMarker ? firstVerse : null;
   for (const boundary of boundaries) {
     const before = text.slice(start, boundary.start).trim();
-    if (before) verses.push(`${currentVerse} ${before}`);
-    currentVerse = boundary.verse;
+    if (before) verses.push(currentVerse === null ? before : `${currentVerse} ${before}`);
+    currentVerse = boundary.verse; // Diese Nummer war im eingefügten Text vorhanden.
     start = boundary.end;
   }
   const last = text.slice(start).trim();
-  if (last) verses.push(`${currentVerse} ${last}`);
+  if (last) verses.push(currentVerse === null ? last : `${currentVerse} ${last}`);
   return verses.length ? verses : null;
 }
 
@@ -451,8 +457,24 @@ function parseBaptismBlock(text) {
 }
 
 export function parseSermonEmail(text) {
+  text = String(text ?? '').replace(/\r\n?/g, '\n');
   text = removeNumericBracketMarkers(text);
   if (!text || !text.trim()) return [];
+
+  // Wenn der Text explizite „Folie N:“-Markierungen enthält, sind diese
+  // die maßgeblichen Foliengrenzen. Absätze innerhalb einer so markierten
+  // Folie (z. B. Bibelstellenangabe + Bibeltext) gehören dagegen zusammen.
+  const slideLabelPattern = /^[\t \u00a0]*Folie[\t \u00a0]+\d+[\t \u00a0]*:[\t \u00a0]*(?:\n|$)/gim;
+  if (slideLabelPattern.test(text)) {
+    const sections = text.split(slideLabelPattern).map(section => section.trim()).filter(Boolean);
+    const explicitlyMarkedSlides = [];
+    for (const section of sections) {
+      const oneSlideText = section.replace(/\n\s*\n+/g, '\n').trim();
+      if (oneSlideText) explicitlyMarkedSlides.push(...parseBlock(oneSlideText));
+    }
+    return explicitlyMarkedSlides;
+  }
+
   const baptism = parseBaptismBlock(text);
   if (baptism) return baptism;
   const blocks = text.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
@@ -463,6 +485,17 @@ export function parseSermonEmail(text) {
     const isReferenceOnlyBlock = match && match.index === 0 && match[0].length === blocks[i].length;
     if (isReferenceOnlyBlock && !referenceRegex.test(blocks[i - 1])) {
       blocks[i - 1] = `${blocks[i - 1]} ${blocks[i]}`;
+      blocks.splice(i, 1);
+      i--;
+    }
+  }
+  // Eine alleinstehende Bibelreferenz am Anfang gehört zum direkt
+  // folgenden Absatz mit dem ausgeschriebenen Bibeltext.
+  for (let i = 0; i < blocks.length - 1; i++) {
+    const match = blocks[i].match(referenceRegex);
+    const isReferenceOnlyBlock = match && match.index === 0 && match[0].length === blocks[i].length;
+    if (isReferenceOnlyBlock && !referenceRegex.test(blocks[i + 1])) {
+      blocks[i + 1] = `${blocks[i]}\n${blocks[i + 1]}`;
       blocks.splice(i, 1);
       i--;
     }
