@@ -107,31 +107,56 @@ function escapeRtfPlainText(value) {
   return out;
 }
 
-function rtfText(value, superscriptVerseNumbers = false) {
+function rtfText(value, superscriptVerseNumbers = false, underlineRanges = []) {
   const text = String(value ?? '').replace(/\r\n?/g, '\n');
-  if (!superscriptVerseNumbers) return escapeRtfPlainText(text);
-  const marker = /(^|\s)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu;
+
+  const renderSegment = segment => {
+    if (!superscriptVerseNumbers) return escapeRtfPlainText(segment);
+
+    const marker = /(^|\s)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu;
+    let result = '';
+    let cursor = 0;
+
+    for (const match of segment.matchAll(marker)) {
+      const start = match.index;
+      result += escapeRtfPlainText(segment.slice(cursor, start));
+      result += escapeRtfPlainText(match[1]);
+      result += `\\super ${match[2]}\\nosupersub `;
+      cursor = start + match[0].length;
+    }
+
+    result += escapeRtfPlainText(segment.slice(cursor));
+    return result;
+  };
+
+  if (!underlineRanges.length) return renderSegment(text);
+
   let result = '';
   let cursor = 0;
-  for (const match of text.matchAll(marker)) {
-    const start = match.index;
-    result += escapeRtfPlainText(text.slice(cursor, start));
-    result += escapeRtfPlainText(match[1]);
-    result += `\\super ${match[2]}\\nosupersub `;
-    cursor = start + match[0].length;
+
+  for (const range of underlineRanges) {
+    const start = Math.max(cursor, range.start);
+    const end = Math.min(text.length, range.end);
+
+    if (start >= end) continue;
+
+    result += renderSegment(text.slice(cursor, start));
+    result += `\\ul ${renderSegment(text.slice(start, end))}\\ulnone `;
+    cursor = end;
   }
-  result += escapeRtfPlainText(text.slice(cursor));
+
+  result += renderSegment(text.slice(cursor));
   return result;
 }
 
-function replaceRtfBody(rtfBytes, value, superscriptVerseNumbers = false) {
+function replaceRtfBody(rtfBytes, value, superscriptVerseNumbers = false, underlineRanges = []) {
   const rtf = new TextDecoder('latin1').decode(rtfBytes);
   const bodyStart = rtf.indexOf('\\cf2 ');
   const bodyEnd = rtf.lastIndexOf('}');
   if (bodyStart < 0 || bodyEnd <= bodyStart) throw new Error('Textbereich in der PP7-Vorlage wurde nicht erkannt.');
   const prefix = rtf.slice(0, bodyStart + '\\cf2 '.length);
   const suffix = rtf.slice(bodyEnd);
-  const replacement = prefix + rtfText(value, superscriptVerseNumbers) + suffix;
+  const replacement = prefix + rtfText(value, superscriptVerseNumbers, underlineRanges) + suffix;
   return new TextEncoder().encode(replacement);
 }
 
@@ -149,7 +174,7 @@ function transformMessage(bytes, replacements) {
       const replacement = replacements.shift();
       if (!replacement) return field;
       changed = true;
-      return { ...field, value: replaceRtfBody(field.value, replacement.text, replacement.superscriptVerseNumbers) };
+      return {   ...field,   value: replaceRtfBody(     field.value,     replacement.text,     replacement.superscriptVerseNumbers,     replacement.underlineRanges || []   ) };
     }
     const nested = transformMessage(field.value, replacements);
     if (nested.changed) {
@@ -175,7 +200,16 @@ export function createNativeSlide(templateBytes, slide) {
   const replacements = slide.type === 'point'
     ? [{ text: String(slide.content ?? '').toLocaleUpperCase('de-DE') }]
     : [
-        { text: slide.type === 'baptism' ? `${slide.name ?? ''}\n${slide.content ?? ''}` : (slide.content ?? ''), superscriptVerseNumbers: slide.type === 'bible' || slide.type === 'baptism' },
+        {
+  text: slide.type === 'baptism'
+    ? `${slide.name ?? ''}\n${slide.content ?? ''}`
+    : (slide.content ?? ''),
+  superscriptVerseNumbers: slide.type === 'bible' || slide.type === 'baptism',
+  underlineRanges: (slide.underlineRanges || []).map(range => ({
+    start: range.start + (slide.type === 'baptism' ? `${slide.name ?? ''}\n`.length : 0),
+    end: range.end + (slide.type === 'baptism' ? `${slide.name ?? ''}\n`.length : 0)
+  }))
+},
         { text: slide.type === 'quote' ? (slide.author ?? '') : (slide.reference ?? '') }
       ];
 
