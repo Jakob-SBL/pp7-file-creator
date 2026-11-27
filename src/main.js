@@ -30,10 +30,79 @@ let undoTimer = null;
 const $ = id => document.getElementById(id);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labelFor = slide => slide.type === 'bible' ? 'Bibelstelle' : slide.type === 'baptism' ? 'Taufe' : slide.type === 'quote' ? 'Zitat' : 'Punkt';
+let pastedUnderlines = [];
 
+function extractUnderlinedPhrases(doc) {
+  const elements = [...doc.querySelectorAll('u, [style*="underline" i]')];
+
+  return elements
+    .filter(element => {
+      const style = element.getAttribute('style') || '';
+      const isUnderlined =
+        element.tagName === 'U' ||
+        /text-decoration(?:-line)?\s*:[^;]*underline/i.test(style);
+
+      if (!isUnderlined) return false;
+
+      // Verschachtelte Unterstreichungen nicht doppelt erfassen.
+      return !element.parentElement?.closest('u, [style*="underline" i]');
+    })
+    .map(element => element.textContent.trim())
+    .filter(Boolean);
+}
+
+function getUnderlineRanges(text, phrases = []) {
+  if (!text || !phrases.length) return [];
+
+  const normalize = value => String(value)
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const normalizedText = normalize(text);
+  const ranges = [];
+
+  for (const phrase of phrases) {
+    const normalizedPhrase = normalize(phrase);
+
+    // Den gesamten Bibeltext nicht unterstreichen.
+    if (!normalizedPhrase || normalizedPhrase === normalizedText) continue;
+
+    const escaped = normalizedPhrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = escaped.replace(/\s+/g, '\\s+');
+    const match = new RegExp(pattern, 'i').exec(text);
+
+    if (match) {
+      ranges.push({
+        start: match.index,
+        end: match.index + match[0].length
+      });
+    }
+  }
+
+  return ranges.sort((a, b) => a.start - b.start);
+}
+
+function renderUnderlinedText(text, ranges = []) {
+  if (!ranges.length) return escapeHtml(text);
+
+  let result = '';
+  let position = 0;
+
+  for (const range of ranges) {
+    if (range.start < position) continue;
+
+    result += escapeHtml(text.slice(position, range.start));
+    result += `<u>${escapeHtml(text.slice(range.start, range.end))}</u>`;
+    position = range.end;
+  }
+
+  result += escapeHtml(text.slice(position));
+  return result;
+}
 function previewMarkup(slide) {
   const sub = ['bible', 'baptism'].includes(slide.type) ? slide.reference : slide.type === 'quote' ? slide.author : '';
-  const bibleBody = escapeHtml(slide.content || '').replace(/(^|\s)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`);
+  const bibleBody = renderUnderlinedText(   slide.content || '',   (slide.type === 'bible' || slide.type === 'baptism')     ? (slide.underlineRanges || [])     : [] ).replace(/(^|\s|>)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`);
   const body = slide.type === 'bible' ? bibleBody : slide.type === 'baptism' ? `${escapeHtml(slide.name || '')}<br>${bibleBody}` : escapeHtml(slide.content || '');
   const theme = slide.type === 'point' ? 'point-theme-preview' : slide.type === 'quote' ? 'quote-theme-preview' : 'bible-theme-preview';
   return `<div class="preview-screen ${theme}"><div class="preview-main">${body}</div><div class="preview-sub">${escapeHtml(sub || '')}</div></div>`;
@@ -110,7 +179,7 @@ function render() {
     card.querySelector('.reference-input').addEventListener('input', e => { slide.reference = e.target.value; updateCardPreview(index); });
     card.querySelector('.author-input').addEventListener('input', e => { slide.author = e.target.value; updateCardPreview(index); });
     card.querySelector('.name-input').addEventListener('input', e => { slide.name = e.target.value; updateCardPreview(index); });
-    card.querySelector('.content-input').addEventListener('input', e => { slide.content = e.target.value; updateCardPreview(index); });
+    card.querySelector('.content-input').addEventListener('input', e => {   slide.content = e.target.value;   slide.underlineRanges = getUnderlineRanges(     slide.content,     slide.underlinePhrases || []   );   updateCardPreview(index); });
     card.querySelector('.duplicate-slide').addEventListener('click', () => { slides.splice(index + 1, 0, { ...slide, id: crypto.randomUUID() }); render(); });
     card.querySelector('.delete-slide').addEventListener('click', () => {
       if (undoTimer) clearTimeout(undoTimer);
@@ -166,6 +235,7 @@ $('sermon-input').addEventListener('paste', event => {
 
   event.preventDefault();
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  pastedUnderlines.push(...extractUnderlinedPhrases(doc));
   const output = [];
   const blockTags = new Set(['ADDRESS', 'ARTICLE', 'ASIDE', 'BLOCKQUOTE', 'DIV', 'LI', 'P', 'SECTION']);
   const appendBreak = value => {
@@ -205,6 +275,18 @@ $('create-slides').addEventListener('click', () => {
   $('sermon-input').value = cleanedEmail;
   const parsed = parseSermonEmail(cleanedEmail);
   if (!parsed.length) { $('sermon-input').focus(); $('sermon-input').setCustomValidity('Bitte füge zuerst den Predigttext ein.'); $('sermon-input').reportValidity(); $('sermon-input').setCustomValidity(''); return; }
-  slides = parsed; render(); $('editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  slides = parsed.map(slide => {
+  if (slide.type === 'bible' || slide.type === 'baptism') {
+    slide.underlinePhrases = [...pastedUnderlines];
+    slide.underlineRanges = getUnderlineRanges(
+      slide.content || '',
+      slide.underlinePhrases
+    );
+  }
+
+  return slide;
+});
+
+pastedUnderlines = [];
 });
 $('empty-state').hidden = false;
