@@ -287,6 +287,7 @@ $('create-slides').addEventListener('click', () => {
   return slide;
 });
 
-pastedUnderlines = [];
+  pastedUnderlines = [];
+  render();
 });
 $('empty-state').hidden = false;
