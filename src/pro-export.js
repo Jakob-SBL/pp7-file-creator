@@ -110,7 +110,7 @@ function escapeRtfPlainText(value) {
 function rtfText(value, superscriptVerseNumbers = false) {
   const text = String(value ?? '').replace(/\r\n?/g, '\n');
   if (!superscriptVerseNumbers) return escapeRtfPlainText(text);
-  const marker = /(^|\s)(\d{1,3})\s*(?=[\p{L}„“"'(])/gu;
+  const marker = /(^|\s)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu;
   let result = '';
   let cursor = 0;
   for (const match of text.matchAll(marker)) {
