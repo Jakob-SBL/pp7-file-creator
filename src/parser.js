@@ -483,9 +483,18 @@ export function parseSermonEmail(text) {
     return explicitlyMarkedSlides;
   }
 
-  const baptism = parseBaptismBlock(text);
-  if (baptism) return baptism;
-  const blocks = text.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
+ const baptism = parseBaptismBlock(text);
+if (baptism) return baptism;
+
+// Neue Bibelreferenzen am Zeilenanfang als eigene Folienblöcke erkennen.
+const referenceStartPattern = new RegExp(
+  `\\n(?=\\s*\\*{0,2}(?:${bookPattern})\\s+\\d)`,
+  'gi'
+);
+
+text = text.replace(referenceStartPattern, '\n\n');
+
+const blocks = text.replace(/\r\n?/g, '\n').trim().split(/\n\s*\n+/).map(x => x.trim()).filter(Boolean);
   // Falls die Bibelstellenangabe in der E-Mail als eigener Absatz direkt
   // unter dem Bibeltext steht, wird sie mit diesem Textblock verbunden.
   for (let i = 1; i < blocks.length; i++) {
