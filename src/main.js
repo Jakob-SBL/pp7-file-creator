@@ -33,7 +33,7 @@ const labelFor = slide => slide.type === 'bible' ? 'Bibelstelle' : slide.type ==
 
 function previewMarkup(slide) {
   const sub = ['bible', 'baptism'].includes(slide.type) ? slide.reference : slide.type === 'quote' ? slide.author : '';
-  const bibleBody = escapeHtml(slide.content || '').replace(/(^|\s)(\d{1,3})\s*(?=[\p{L}„“"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`);
+  const bibleBody = escapeHtml(slide.content || '').replace(/(^|\s)(\d{1,3})\s*(?=[\p{L}„“»"'(])/gu, (_, space, number) => `${space}<sup class="verse-number">${number}</sup>`);
   const body = slide.type === 'bible' ? bibleBody : slide.type === 'baptism' ? `${escapeHtml(slide.name || '')}<br>${bibleBody}` : escapeHtml(slide.content || '');
   const theme = slide.type === 'point' ? 'point-theme-preview' : slide.type === 'quote' ? 'quote-theme-preview' : 'bible-theme-preview';
   return `<div class="preview-screen ${theme}"><div class="preview-main">${body}</div><div class="preview-sub">${escapeHtml(sub || '')}</div></div>`;
