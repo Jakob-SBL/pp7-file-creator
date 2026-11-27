@@ -464,6 +464,7 @@ function removeBidiControlCharacters(value) {
 }
 
 export function parseSermonEmail(text) {
+  text = decodeEmailEntities(text);
   text = removeBidiControlCharacters(text).replace(/\r\n?/g, '\n');
   text = removeNumericBracketMarkers(text);
   if (!text || !text.trim()) return [];
